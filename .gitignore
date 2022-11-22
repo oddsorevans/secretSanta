@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 emails.csv
-connect.py
+credentials.py

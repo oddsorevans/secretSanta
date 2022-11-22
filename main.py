@@ -1,4 +1,3 @@
-#main program. email connection made in non committed file
 import csv
 import random
 from datetime import datetime
@@ -17,7 +16,7 @@ complete = False
 with open("emails.csv", newline='') as csvfile:
     reader = csv.reader(csvfile, delimiter=',', quotechar='|')
     for row in reader:
-        emails[row[0]] = row[1];
+        emails[row[0]] = {"email":row[1], "interests": ','.join(row[2:])}
         l1.append(row[0])
         l2.append(row[0])
 
@@ -36,8 +35,8 @@ while(not complete):
         pairs[l1[i]] = l2[i]
     
     for key in pairs:
-        #try again if anyone matched with themselves
-        if key == pairs[key] or illegal[key] == pairs[key]:
+        #try again if anyone matched with themselves, their s/o, or each other
+        if key == pairs[key] or (key in illegal and illegal[key] == pairs[key]) or key == pairs[pairs[key]] :
             complete = False
 sendEmails(pairs, emails)
 
