@@ -29,7 +29,7 @@ def process_csv(csv_file_path):
 
     with open(csv_file_path, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
-        
+
         for row in reader:
             name = row['Name'].strip()
             email = row['Email'].strip()
@@ -48,15 +48,16 @@ def process_csv(csv_file_path):
 
 #dictionary of illegal matchups
 illegal = {
-    "Dylan":["Rachel"],
-    "Rachel":["Dylan"],
-    "Chris":["Sarah", "Evan"],
-    "Sarah":["Chris"],
-    "Evan":["Chris"],
-    "Ron":["Sydney"],
-    "Sydney":["Ron"],
-    "Keaton":["Ally"], 
-    "Ally":["Keaton"]
+    "Evan": ["Matti"],
+    "Matti": ["Evan"],
+    "Keaton": ["Ally"],
+    "Ally": ["Keaton"],
+    "Sarah": ["Christopher", "Keaton"],
+    "Christopher": ["Sarah"],
+    "Dylan": ["Rachel"],
+    "Rachel": ["Dylan"],
+    "Ron": ["Sydney"],
+    "Sydney": ["Ron"],
 }
 
 #fill dictionary with name email pair from csv file. csv file is formatted as Name,Email
@@ -66,7 +67,7 @@ pairs = {}
 names = []
 complete = False
 
-names, emails = process_csv('emails.csv')
+names, emails = process_csv('data/Secret Santa 2025 - Sheet1.csv')
 
 pairs = create_secret_santa_list(names, illegal)
 

@@ -1,0 +1,36 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Backend",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/secret-santa-webapp/backend/app.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "python": "${workspaceFolder}/secret-santa-webapp/backend/venv/bin/python",
+            "cwd": "${workspaceFolder}/secret-santa-webapp/backend",
+            "preLaunchTask": "Kill Port 5001"
+        },
+        {
+            "name": "Chrome: Frontend",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/secret-santa-webapp/frontend/src",
+            "sourceMapPathOverrides": {
+                "webpack:///./src/*": "${webRoot}/*"
+            },
+            "preLaunchTask": "Start Frontend Dev Server"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Full Stack: Secret Santa",
+            "configurations": [
+                "Python: Backend",
+                "Chrome: Frontend"
+            ]
+        }
+    ]
+}
