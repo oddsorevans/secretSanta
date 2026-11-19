@@ -25,34 +25,24 @@
 
         <!-- Step Content -->
         <div class="mt-8">
-          <ParticipantsStep
-            v-if="currentStep === 0"
-            :participants="participants"
-            @update:participants="participants = $event"
-          />
+          <ParticipantsStep v-if="currentStep === 0" v-model:participants="participants" />
 
           <ExclusionsStep
             v-if="currentStep === 1"
+            v-model:exclusions="exclusions"
             :participants="participants"
-            :exclusions="exclusions"
-            @update:exclusions="exclusions = $event"
           />
 
           <EmailTemplateStep
             v-if="currentStep === 2"
-            :emailSubject="emailSubject"
-            :emailTemplate="emailTemplate"
-            :smtpConfig="smtpConfig"
+            v-model:emailSubject="emailSubject"
+            v-model:emailTemplate="emailTemplate"
+            v-model:smtpConfig="smtpConfig"
+            v-model:cardStyle="cardStyle"
+            v-model:debugMode="debugMode"
+            v-model:emailDebugMode="emailDebugMode"
             :participants="participants"
-            :cardStyle="cardStyle"
-            :debugMode="debugMode"
-            :emailDebugMode="emailDebugMode"
-            @update:emailSubject="emailSubject = $event"
-            @update:emailTemplate="emailTemplate = $event"
-            @update:smtpConfig="smtpConfig = $event"
-            @update:cardStyle="cardStyle = $event"
-            @update:debugMode="debugMode = $event"
-            @update:emailDebugMode="emailDebugMode = $event"
+            :themes="themes"
           />
 
           <SendStep
@@ -65,6 +55,7 @@
             :cardStyle="cardStyle"
             :debugMode="debugMode"
             :emailDebugMode="emailDebugMode"
+            :themes="themes"
           />
         </div>
 
@@ -94,7 +85,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import axios from 'axios'
 import StepIndicator from './components/StepIndicator.vue'
 import ParticipantsStep from './components/ParticipantsStep.vue'
 import ExclusionsStep from './components/ExclusionsStep.vue'
@@ -102,52 +94,92 @@ import EmailTemplateStep from './components/EmailTemplateStep.vue'
 import SendStep from './components/SendStep.vue'
 
 const steps = ['Participants', 'Exclusions', 'Email Template', 'Send']
-const currentStep = ref(0)
+const STORAGE_KEY = 'secret-santa-draft'
+const year = new Date().getFullYear()
 
-const participants = ref([])
-const exclusions = ref({})
-const cardStyle = ref('classic')
-const debugMode = ref(false)
-const emailDebugMode = ref(false)
-const emailSubject = ref('Friends Secret Santa 2024')
-const emailTemplate = ref(`Welcome to our 3rd Annual Secret Santa! Thank you for participating {giver_name}!
+const defaults = {
+  participants: [],
+  exclusions: {},
+  cardStyle: 'dossier',
+  emailSubject: `Secret Santa ${year}`,
+  emailTemplate: `Welcome to our Secret Santa! Thank you for participating {giver_name}!
 
 Before I tell you who you are buying for, let me remind you of the rules:
 1) $25 spending limit
 2) Remember, it's a secret!
-3) These will be given out at the Christmas Party on December 26th!
+3) Gifts will be exchanged at the Christmas Party on December 26th!
 4) You cannot buy for your s/o. This shouldn't happen, but if you receive your s/o please let me know so we can reroll.
 
 Now for the big reveal! You will be purchasing for {recipient_name}! Their interests include {recipient_interests}.
 
 Their address is: {recipient_address}
 
-Have fun and see you soon!`)
+Have fun and see you soon!`,
+  smtpServer: 'smtp.gmail.com',
+  smtpPort: 587,
+  smtpEmail: '',
+}
 
-const smtpConfig = ref({
-  server: 'smtp.gmail.com',
-  port: 587,
-  email: '',
-  password: ''
+// Restore the draft (never the password)
+let saved = {}
+try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {} } catch { /* no storage, use defaults */ }
+const init = { ...defaults, ...saved }
+
+const currentStep = ref(0)
+const participants = ref(init.participants)
+const exclusions = ref(init.exclusions)
+const cardStyle = ref(init.cardStyle)
+const emailSubject = ref(init.emailSubject)
+const emailTemplate = ref(init.emailTemplate)
+const debugMode = ref(false)
+const emailDebugMode = ref(false)
+const smtpConfig = ref({ server: init.smtpServer, port: init.smtpPort, email: init.smtpEmail, password: '' })
+const themes = ref({})
+
+onMounted(async () => {
+  try {
+    const { data } = await axios.get('/api/themes')
+    themes.value = Object.fromEntries(data.map(t => [t.key, t]))
+    if (!themes.value[cardStyle.value]) cardStyle.value = data[0].key
+  } catch (e) {
+    console.error('Could not load themes - is the backend running?', e)
+  }
 })
 
-const canProceed = computed(() => {
-  if (currentStep.value === 0) {
-    return participants.value.length >= 3
+// Drop exclusions that refer to people who were removed
+watch(participants, (list) => {
+  const names = new Set(list.map(p => p.name))
+  const pruned = {}
+  for (const [giver, blocked] of Object.entries(exclusions.value)) {
+    if (names.has(giver)) pruned[giver] = blocked.filter(n => names.has(n))
   }
+  exclusions.value = pruned
+}, { deep: true })
+
+watch([participants, exclusions, cardStyle, emailSubject, emailTemplate, smtpConfig], () => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      participants: participants.value,
+      exclusions: exclusions.value,
+      cardStyle: cardStyle.value,
+      emailSubject: emailSubject.value,
+      emailTemplate: emailTemplate.value,
+      smtpServer: smtpConfig.value.server,
+      smtpPort: smtpConfig.value.port,
+      smtpEmail: smtpConfig.value.email,
+    }))
+  } catch { /* storage unavailable */ }
+}, { deep: true })
+
+const canProceed = computed(() => {
+  if (currentStep.value === 0) return participants.value.length >= 3
   if (currentStep.value === 2) {
-    // Only require SMTP config if NOT in debug mode
-    if (debugMode.value) {
-      return true
-    }
-    return smtpConfig.value.email && smtpConfig.value.password
+    return debugMode.value || !!(smtpConfig.value.email && smtpConfig.value.password)
   }
   return true
 })
 
 const nextStep = () => {
-  if (canProceed.value && currentStep.value < steps.length - 1) {
-    currentStep.value++
-  }
+  if (canProceed.value && currentStep.value < steps.length - 1) currentStep.value++
 }
 </script>

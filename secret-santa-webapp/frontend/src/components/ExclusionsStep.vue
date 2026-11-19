@@ -85,86 +85,36 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 
-const props = defineProps({
-  participants: Array,
-  exclusions: Object
-})
-
-const emit = defineEmits(['update:exclusions'])
-
-const localExclusions = ref({ ...props.exclusions })
+const props = defineProps({ participants: Array })
+const exclusions = defineModel('exclusions', { required: true })
 const autoMutual = ref(true)
 
-watch(() => props.exclusions, (newVal) => {
-  localExclusions.value = { ...newVal }
-}, { deep: true })
-
-watch(localExclusions, (newVal) => {
-  emit('update:exclusions', newVal)
-}, { deep: true })
-
-const getOtherParticipants = (name) => {
-  return props.participants.filter(p => p.name !== name)
-}
-
-const isExcluded = (giver, recipient) => {
-  return localExclusions.value[giver]?.includes(recipient) || false
-}
-
-const isMutualExclusion = (giver, recipient) => {
-  return isExcluded(giver, recipient) && isExcluded(recipient, giver)
-}
-
-const getExclusionCount = (name) => {
-  return localExclusions.value[name]?.length || 0
-}
+const getOtherParticipants = (name) => props.participants.filter(p => p.name !== name)
+const isExcluded = (giver, recipient) => exclusions.value[giver]?.includes(recipient) || false
+const isMutualExclusion = (giver, recipient) => isExcluded(giver, recipient) && isExcluded(recipient, giver)
+const getExclusionCount = (name) => exclusions.value[name]?.length || 0
 
 const getExclusionButtonClass = (giver, recipient) => {
-  const excluded = isExcluded(giver, recipient)
-  const mutual = isMutualExclusion(giver, recipient)
-
-  if (excluded && mutual) {
+  if (isMutualExclusion(giver, recipient)) {
     return 'bg-red-500 text-white hover:bg-red-600 ring-2 ring-red-200 border-transparent shadow-sm'
-  } else if (excluded) {
+  }
+  if (isExcluded(giver, recipient)) {
     return 'bg-red-500 text-white hover:bg-red-600 border-transparent shadow-sm'
   }
   return 'bg-white text-gray-600 border-gray-200 hover:border-modern-primary hover:text-modern-primary hover:shadow-sm'
 }
 
 const toggleExclusion = (giver, recipient) => {
-  if (!localExclusions.value[giver]) {
-    localExclusions.value[giver] = []
+  const next = { ...exclusions.value }
+  const turnOn = !isExcluded(giver, recipient)
+  const set = (a, b) => {
+    const rest = (next[a] || []).filter(n => n !== b)
+    next[a] = turnOn ? [...rest, b] : rest
   }
-
-  const index = localExclusions.value[giver].indexOf(recipient)
-  if (index > -1) {
-    // Remove exclusion
-    localExclusions.value[giver].splice(index, 1)
-
-    // If auto-mutual, also remove reciprocal
-    if (autoMutual.value) {
-      if (localExclusions.value[recipient]) {
-        const reciprocalIndex = localExclusions.value[recipient].indexOf(giver)
-        if (reciprocalIndex > -1) {
-          localExclusions.value[recipient].splice(reciprocalIndex, 1)
-        }
-      }
-    }
-  } else {
-    // Add exclusion
-    localExclusions.value[giver].push(recipient)
-
-    // If auto-mutual, add reciprocal exclusion
-    if (autoMutual.value) {
-      if (!localExclusions.value[recipient]) {
-        localExclusions.value[recipient] = []
-      }
-      if (!localExclusions.value[recipient].includes(giver)) {
-        localExclusions.value[recipient].push(giver)
-      }
-    }
-  }
+  set(giver, recipient)
+  if (autoMutual.value) set(recipient, giver)
+  exclusions.value = next
 }
 </script>
