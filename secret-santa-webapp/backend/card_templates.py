@@ -1,208 +1,159 @@
-# Christmas-themed email card templates for Python backend
+"""Email card themes. One email-safe layout, themed by tokens.
 
-CARD_STYLES = {
-    'classic': 'Classic Christmas',
-    'elegant': 'Elegant Gold',
-    'winter': 'Winter Wonderland',
-    'festive': 'Festive Fun',
-    'rustic': 'Rustic Charm'
+Gmail strips position/transform and most gradients, so every themed area has a
+solid bgcolor fallback; gradients/stripes are progressive enhancement.
+"""
+from datetime import datetime
+from html import escape
+
+DEFAULT_THEME = 'dossier'
+
+THEMES = {
+    'dossier': {
+        'name': 'Top Secret Dossier',
+        'description': 'Manila folder, typewriter text, redaction bars',
+        'emoji': '🕵️',
+        'page': '#d9d2c3', 'card': '#f1e3b8', 'edge': '#8c7a4e',
+        'head_bg': '#e6d49b', 'head_fg': '#1c1c1c',
+        'font': "'Courier New', Courier, monospace", 'heading_font': "'Courier New', Courier, monospace",
+        'kicker': 'CLASSIFIED // EYES ONLY', 'title': 'OPERATION SECRET SANTA',
+        'greeting': 'AGENT {giver},', 'label': 'YOUR TARGET',
+        'interests_label': 'KNOWN INTERESTS', 'address_label': 'LAST KNOWN ADDRESS',
+        'accent': '#b3001b', 'body_fg': '#2a2a2a', 'panel': '#fbf3d9',
+        'box_bg': '#1c1c1c', 'box_fg': '#f1e3b8', 'box_label': '#ff5a5a',
+        'footer': 'This message will not self-destruct. Please keep it secret anyway.',
+        'stripe': 'repeating-linear-gradient(90deg,#1c1c1c 0 38px,#f1e3b8 38px 46px)', 'stripe_bg': '#1c1c1c',
+    },
+    'northpole_post': {
+        'name': 'North Pole Post',
+        'description': 'Vintage airmail with striped border and postmark',
+        'emoji': '✉️',
+        'page': '#e9e4d8', 'card': '#fffaf0', 'edge': '#c8102e',
+        'head_bg': '#fffaf0', 'head_fg': '#14325c',
+        'font': "Georgia, 'Times New Roman', serif", 'heading_font': "Georgia, 'Times New Roman', serif",
+        'kicker': 'PAR AVION · AIR MAIL · NORTH POLE', 'title': 'Secret Santa Special Delivery',
+        'greeting': 'Dear {giver},', 'label': 'Deliver your gift to',
+        'interests_label': 'Return address tastes', 'address_label': 'Mail it to',
+        'accent': '#c8102e', 'body_fg': '#26344d', 'panel': '#f6efe0',
+        'box_bg': '#14325c', 'box_fg': '#fffaf0', 'box_label': '#f4c7cd',
+        'footer': 'Postmarked at the North Pole · Handle with festive care',
+        'stripe': 'repeating-linear-gradient(135deg,#c8102e 0 18px,#fffaf0 18px 30px,#14325c 30px 48px,#fffaf0 48px 60px)', 'stripe_bg': '#c8102e',
+    },
+    'aurora': {
+        'name': 'Midnight Aurora',
+        'description': 'Deep navy night sky with teal and violet glow',
+        'emoji': '🌌',
+        'page': '#0a0f24', 'card': '#121a3a', 'edge': '#2f3e7a',
+        'head_bg': '#1b6f7a', 'head_fg': '#f4fbff',
+        'font': "'Helvetica Neue', Arial, sans-serif", 'heading_font': "'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif",
+        'kicker': '✦ · ˚ ✧ · ✦', 'title': 'Secret Santa',
+        'greeting': 'Hello, {giver}', 'label': 'Under the northern lights, you are gifting',
+        'interests_label': 'They glow for', 'address_label': 'Find them at',
+        'accent': '#7ef0d8', 'body_fg': '#d6def7', 'panel': '#1a2450',
+        'box_bg': '#3a2a7a', 'box_fg': '#f4fbff', 'box_label': '#a9f5e6',
+        'footer': 'Keep the secret — the sky is watching ✦',
+        'stripe': 'linear-gradient(90deg,#1de9b6,#5b8cff,#a24bff)', 'stripe_bg': '#5b8cff',
+        'head_grad': 'linear-gradient(135deg,#0f8a8f 0%,#4a3fb0 60%,#7a2fb8 100%)',
+    },
+    'ski_lodge': {
+        'name': 'Retro Ski Lodge',
+        'description': '70s poster stripes in burnt orange and mustard',
+        'emoji': '🎿',
+        'page': '#f3e6cc', 'card': '#fbf1dc', 'edge': '#7a3b10',
+        'head_bg': '#c8561b', 'head_fg': '#fbf1dc',
+        'font': "'Trebuchet MS', Verdana, sans-serif", 'heading_font': "Georgia, 'Times New Roman', serif",
+        'kicker': 'EST. 1974 · APRÈS-SKI SOCIAL CLUB', 'title': 'Secret Santa Lodge Party',
+        'greeting': 'Welcome in, {giver}!', 'label': 'You are shredding gifts for',
+        'interests_label': 'On their wish list', 'address_label': 'Send the loot to',
+        'accent': '#c8561b', 'body_fg': '#4a2a12', 'panel': '#f4e3bf',
+        'box_bg': '#e8a317', 'box_fg': '#3b1f0b', 'box_label': '#7a3b10',
+        'footer': 'Hot cocoa required · Spoilers are a black diamond offense',
+        'stripe': 'linear-gradient(180deg,#7a3b10 0 25%,#c8561b 25% 50%,#e8a317 50% 75%,#f3e6cc 75% 100%)', 'stripe_bg': '#c8561b',
+    },
+    'gingerbread': {
+        'name': 'Gingerbread Lane',
+        'description': 'Cookie brown with icing borders and candy accents',
+        'emoji': '🍪',
+        'page': '#f6e9dc', 'card': '#a8683a', 'edge': '#ffffff',
+        'head_bg': '#8a4f26', 'head_fg': '#fff8ef',
+        'font': "'Trebuchet MS', 'Comic Sans MS', sans-serif", 'heading_font': "'Trebuchet MS', 'Comic Sans MS', sans-serif",
+        'kicker': '🍬 · 🍪 · 🍬 · 🍪 · 🍬', 'title': 'Gingerbread Secret Santa',
+        'greeting': 'Hi {giver}!', 'label': "You're baking up a gift for",
+        'interests_label': 'Their sweet spots', 'address_label': 'Deliver the treats to',
+        'accent': '#d6283f', 'body_fg': '#4a2a14', 'panel': '#fff8ef',
+        'box_bg': '#fff8ef', 'box_fg': '#4a2a14', 'box_label': '#d6283f',
+        'footer': "Mum's the word — don't crumble under pressure! 🍪",
+        'stripe': 'repeating-linear-gradient(90deg,#ffffff 0 14px,#8a4f26 14px 22px)', 'stripe_bg': '#ffffff',
+        'greet': '#fff8ef',
+    },
 }
 
 
-def generate_email_card(style, giver_name, recipient_name, recipient_interests, recipient_address, message_body):
-    """Generate HTML email card based on selected style."""
-
-    templates = {
-        'classic': generate_classic_card,
-        'elegant': generate_elegant_card,
-        'winter': generate_winter_card,
-        'festive': generate_festive_card,
-        'rustic': generate_rustic_card
-    }
-
-    generator = templates.get(style, generate_classic_card)
-    return generator(giver_name, recipient_name, recipient_interests, recipient_address, message_body)
+def theme_list():
+    return [
+        {'key': k, 'name': t['name'], 'description': t['description'], 'emoji': t['emoji']}
+        for k, t in THEMES.items()
+    ]
 
 
-def generate_classic_card(giver_name, recipient_name, recipient_interests, recipient_address, message_body):
-    """Classic Christmas themed card."""
-    from datetime import datetime
+def fill_template(template, giver, recipient):
+    """Substitute {giver_name} etc. (plain text, unescaped)."""
+    return (template
+            .replace('{giver_name}', giver['name'])
+            .replace('{recipient_name}', recipient['name'])
+            .replace('{recipient_interests}', recipient.get('interests', ''))
+            .replace('{recipient_address}', recipient.get('address', '')))
+
+
+def render_card(theme_key, giver, recipient, message_template):
+    """Return the full HTML email. All user-supplied text is escaped."""
+    t = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+    e = escape
+    message = e(fill_template(message_template, giver, recipient))
+    greeting = e(t['greeting']).replace('{giver}', e(giver['name']))
     year = datetime.now().year
 
-    address_section = ''
-    if recipient_address:
-        address_section = f'''
-                  <div style="margin-top: 15px; padding: 15px; background-color: rgba(255,255,255,0.9); border-radius: 10px;">
-                    <p style="margin: 0; color: #165B33; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
-                      Their Address
-                    </p>
-                    <p style="margin: 10px 0 0 0; color: #333333; font-size: 16px;">
-                      {recipient_address}
-                    </p>
-                  </div>'''
+    def grad(bg, css=None):
+        # solid bgcolor for clients that drop gradients, css gradient on top
+        return f'bgcolor="{bg}" style="background-color:{bg};' + (f'background-image:{css};' if css else '')
+
+    address = ''
+    if recipient.get('address'):
+        address = f'''
+              <p style="margin:18px 0 4px;color:{t['box_label']};font-size:12px;letter-spacing:2px;text-transform:uppercase;">{e(t['address_label'])}</p>
+              <p style="margin:0;color:{t['box_fg']};font-size:16px;line-height:1.5;">{e(recipient['address'])}</p>'''
 
     return f'''<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Lora:wght@400;600&display=swap');
-  </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: 'Lora', Georgia, serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 40px 20px;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #165B33 0%, #0F4229 100%); border-radius: 20px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
-          <tr>
-            <td style="background: linear-gradient(90deg, #C41E3A 0%, #8B1538 100%); padding: 40px; text-align: center; border-bottom: 4px solid #FFD700;">
-              <h1 style="margin: 0; color: #FFFFFF; font-family: 'Playfair Display', serif; font-size: 48px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-                🎅 Secret Santa 🎄
-              </h1>
-              <p style="margin: 10px 0 0 0; color: #FFD700; font-size: 18px; letter-spacing: 2px;">
-                ✦ {year} ✦
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 50px 40px; background-color: #FDFBF7;">
-              <h2 style="color: #C41E3A; font-family: 'Playfair Display', serif; font-size: 32px; margin: 0 0 20px 0; text-align: center;">
-                Hello, {giver_name}! 🎁
-              </h2>
-              <div style="background-color: #FFFFFF; padding: 30px; border-radius: 15px; border-left: 5px solid #165B33; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <p style="color: #333333; font-size: 16px; line-height: 1.8; margin: 0; white-space: pre-wrap;">{message_body}</p>
-              </div>
-              <div style="background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); padding: 30px; border-radius: 15px; margin: 30px 0; text-align: center; box-shadow: 0 6px 20px rgba(255, 215, 0, 0.4);">
-                <p style="margin: 0 0 15px 0; color: #8B1538; font-size: 18px; font-weight: 600;">
-                  🎯 Your Secret Santa Recipient
-                </p>
-                <h3 style="margin: 0; color: #C41E3A; font-family: 'Playfair Display', serif; font-size: 36px; text-shadow: 1px 1px 2px rgba(0,0,0,0.1);">
-                  {recipient_name}
-                </h3>
-                <div style="margin-top: 20px; padding: 20px; background-color: rgba(255,255,255,0.9); border-radius: 10px;">
-                  <p style="margin: 0; color: #165B33; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
-                    Their Interests
-                  </p>
-                  <p style="margin: 10px 0 0 0; color: #333333; font-size: 16px; font-style: italic;">
-                    {recipient_interests}
-                  </p>
-                </div>{address_section}
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td style="background: linear-gradient(90deg, #0F4229 0%, #165B33 100%); padding: 30px; text-align: center;">
-              <p style="margin: 0; color: #FFD700; font-size: 16px; font-weight: 600;">
-                🌟 Happy Holidays! 🌟
-              </p>
-              <p style="margin: 10px 0 0 0; color: #FFFFFF; font-size: 14px; opacity: 0.8;">
-                Keep it secret, keep it festive!
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:{t['page']};font-family:{t['font']};">
+<table width="100%" cellpadding="0" cellspacing="0" bgcolor="{t['page']}" style="padding:32px 12px;"><tr><td align="center">
+  <table width="600" cellpadding="0" cellspacing="0" bgcolor="{t['card']}" style="max-width:600px;width:100%;background-color:{t['card']};border:4px solid {t['edge']};border-radius:6px;">
+    <tr><td height="16" {grad(t['stripe_bg'], t['stripe'])}font-size:0;line-height:16px;">&nbsp;</td></tr>
+    <tr><td align="center" {grad(t['head_bg'], t.get('head_grad'))}padding:32px 24px;">
+      <p style="margin:0 0 10px;color:{t['head_fg']};font-size:12px;letter-spacing:3px;opacity:.85;">{e(t['kicker'])}</p>
+      <h1 style="margin:0;color:{t['head_fg']};font-family:{t['heading_font']};font-size:32px;line-height:1.2;">{e(t['title'])}</h1>
+      <p style="margin:10px 0 0;color:{t['head_fg']};font-size:14px;letter-spacing:4px;">{year}</p>
+    </td></tr>
+    <tr><td style="padding:28px 32px 8px;">
+      <h2 style="margin:0 0 16px;color:{t.get('greet', t['accent'])};font-family:{t['heading_font']};font-size:24px;">{greeting}</h2>
+      <div bgcolor="{t['panel']}" style="background-color:{t['panel']};border-left:5px solid {t['accent']};border-radius:4px;padding:20px;">
+        <p style="margin:0;color:{t['body_fg']};font-size:15px;line-height:1.7;white-space:pre-wrap;">{message}</p>
+      </div>
+    </td></tr>
+    <tr><td style="padding:16px 32px 32px;">
+      <div bgcolor="{t['box_bg']}" style="background-color:{t['box_bg']};border-radius:6px;padding:26px;text-align:center;">
+        <p style="margin:0 0 8px;color:{t['box_label']};font-size:12px;letter-spacing:2px;text-transform:uppercase;">{e(t['label'])}</p>
+        <h3 style="margin:0;color:{t['box_fg']};font-family:{t['heading_font']};font-size:34px;line-height:1.2;">{e(recipient['name'])}</h3>
+        <p style="margin:18px 0 4px;color:{t['box_label']};font-size:12px;letter-spacing:2px;text-transform:uppercase;">{e(t['interests_label'])}</p>
+        <p style="margin:0;color:{t['box_fg']};font-size:16px;line-height:1.5;font-style:italic;">{e(recipient.get('interests', ''))}</p>{address}
+      </div>
+    </td></tr>
+    <tr><td align="center" {grad(t['head_bg'], t.get('head_grad'))}padding:18px 24px;">
+      <p style="margin:0;color:{t['head_fg']};font-size:13px;">{e(t['footer'])}</p>
+    </td></tr>
+    <tr><td height="16" {grad(t['stripe_bg'], t['stripe'])}font-size:0;line-height:16px;">&nbsp;</td></tr>
   </table>
+</td></tr></table>
 </body>
 </html>'''
-
-
-# For brevity, I'll add simplified versions of the other templates
-# In production, these would be full implementations like classic
-
-def generate_elegant_card(giver_name, recipient_name, recipient_interests, recipient_address, message_body):
-    """Elegant Gold themed card."""
-    from datetime import datetime
-    year = datetime.now().year
-
-    address_section = ''
-    if recipient_address:
-        address_section = f'''
-                <div style="margin-top: 20px; padding: 25px; background-color: rgba(255,255,255,0.95); border-radius: 12px;">
-                  <p style="margin: 0 0 12px 0; color: #8B7355; font-size: 13px; text-transform: uppercase; letter-spacing: 2px;">
-                    Their Address
-                  </p>
-                  <p style="margin: 0; color: #4A4A4A; font-size: 16px; line-height: 1.6;">
-                    {recipient_address}
-                  </p>
-                </div>'''
-
-    return f'''<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;600&display=swap');
-  </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f8f8f8; font-family: 'Montserrat', sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f8f8; padding: 40px 20px;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
-          <tr>
-            <td style="background: linear-gradient(90deg, #FFD700 0%, #FFF8DC 50%, #FFD700 100%); height: 8px;"></td>
-          </tr>
-          <tr>
-            <td style="padding: 50px 40px 30px 40px; text-align: center; background: linear-gradient(180deg, #FFFFFF 0%, #FFF8DC 100%);">
-              <h1 style="margin: 0; color: #2C2C2C; font-family: 'Cormorant Garamond', serif; font-size: 52px; font-weight: 300; letter-spacing: 3px;">
-                ✨ Secret Santa ✨
-              </h1>
-              <p style="margin: 20px 0 0 0; color: #8B7355; font-size: 16px; letter-spacing: 4px; text-transform: uppercase; font-weight: 300;">
-                {year}
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 40px 50px;">
-              <p style="color: #2C2C2C; font-size: 18px; margin: 0 0 20px 0; font-weight: 500; text-align: center;">
-                Dear {giver_name},
-              </p>
-              <div style="padding: 30px; margin: 25px 0; background-color: #FFF8DC; border-left: 3px solid #FFD700; border-right: 3px solid #FFD700;">
-                <p style="color: #4A4A4A; font-size: 15px; line-height: 1.9; margin: 0; white-space: pre-wrap;">{message_body}</p>
-              </div>
-              <div style="margin: 40px 0; text-align: center; padding: 40px; background: linear-gradient(135deg, #FFD700 0%, #FDB931 100%); border-radius: 15px;">
-                <h2 style="margin: 20px 0 10px 0; color: #2C2C2C; font-family: 'Cormorant Garamond', serif; font-size: 42px; font-weight: 600;">
-                  {recipient_name}
-                </h2>
-                <div style="margin-top: 25px; padding: 25px; background-color: rgba(255,255,255,0.95); border-radius: 12px;">
-                  <p style="margin: 0 0 12px 0; color: #8B7355; font-size: 13px; text-transform: uppercase; letter-spacing: 2px;">
-                    Gift Inspiration
-                  </p>
-                  <p style="margin: 0; color: #4A4A4A; font-size: 16px; line-height: 1.6;">
-                    {recipient_interests}
-                  </p>
-                </div>{address_section}
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td style="background: linear-gradient(180deg, #FFF8DC 0%, #FFFFFF 100%); padding: 30px; text-align: center;">
-              <p style="margin: 0; color: #8B7355; font-size: 15px;">
-                ✦ Wishing you a magical holiday season ✦
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>'''
-
-
-def generate_winter_card(giver_name, recipient_name, recipient_interests, recipient_address, message_body):
-    """Winter Wonderland themed card - use classic template as base."""
-    return generate_classic_card(giver_name, recipient_name, recipient_interests, recipient_address, message_body)
-
-
-def generate_festive_card(giver_name, recipient_name, recipient_interests, recipient_address, message_body):
-    """Festive Fun themed card - use classic template as base."""
-    return generate_classic_card(giver_name, recipient_name, recipient_interests, recipient_address, message_body)
-
-
-def generate_rustic_card(giver_name, recipient_name, recipient_interests, recipient_address, message_body):
-    """Rustic Charm themed card - use classic template as base."""
-    return generate_classic_card(giver_name, recipient_name, recipient_interests, recipient_address, message_body)

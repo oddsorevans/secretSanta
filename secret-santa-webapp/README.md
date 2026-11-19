@@ -6,10 +6,11 @@ A Vue 3 + Flask web app for organizing a Secret Santa exchange. Add participants
 
 - **Participant management** — add by hand or paste a CSV
 - **Exclusion rules** — one-way (`A→B`) or auto-mutual (`A⇄B`); useful for couples and roommates
-- **5 HTML card styles** — Classic Christmas, Elegant Gold, Winter Wonderland, Festive Fun, Rustic Charm
+- **5 HTML card themes** — Top Secret Dossier, North Pole Post, Midnight Aurora, Retro Ski Lodge, Gingerbread Lane
 - **Custom message templates** — variables: `{giver_name}`, `{recipient_name}`, `{recipient_interests}`, `{recipient_address}`
-- **Debug mode** — generate pairings and view rendered cards without sending email; download cards as HTML
-- **Email debug mode** — send all generated emails to your own address instead of recipients (sanity check)
+- **Preview-only mode** — generate pairings and view rendered cards without sending email; download cards as HTML
+- **Draft autosave** — your list, exclusions and message survive a refresh (the SMTP password is never stored)
+- **Test send** — send all generated emails to your own address instead of recipients (sanity check)
 
 ## Requirements
 
@@ -49,17 +50,17 @@ Frontend runs on <http://localhost:5173> and proxies `/api/*` to the backend.
 
 ## Usage
 
-1. **Participants** — add at least 3 people manually, or upload a CSV with columns `Email,Name,Interests` (and optionally `Address`).
+1. **Participants** — add at least 3 people manually, or upload a CSV with a header row containing `Name`, `Email`, `Interests` (and optionally `Address`) in any order. Imports add to the list and skip duplicate emails.
 2. **Exclusions** — click pairs of names to block them. The auto-mutual toggle decides whether `A→B` also blocks `B→A`.
-3. **Email template** — pick a card style, write your message, and choose between **Send Real Emails** (requires SMTP creds) or **Debug Mode** (preview only).
+3. **Email template** — pick a card style, write your message, and choose between **Send Real Emails** (requires SMTP creds) or **Preview Only**.
 4. **Send** — review the summary and send. In real-send mode, pairings are not shown to you.
 
 ### CSV format
 
 ```csv
-Email,Name,Interests
-alice@example.com,Alice,"Books, hiking, coffee"
-bob@example.com,Bob,"Board games, cooking, vinyl records"
+Name,Email,Interests,Address
+Alice,alice@example.com,"Books, hiking, coffee","123 Main St"
+Bob,bob@example.com,"Board games, cooking, vinyl records",
 ```
 
 ## Project layout
@@ -67,13 +68,13 @@ bob@example.com,Bob,"Board games, cooking, vinyl records"
 ```
 secret-santa-webapp/
 ├── backend/
-│   ├── app.py              # Flask API (/api/send, /api/health)
-│   ├── card_templates.py   # HTML card generators (Python, used at send time)
+│   ├── app.py              # Flask API (/api/send, /api/preview, /api/themes, /api/health)
+│   ├── card_templates.py   # Card themes + renderer (single source for preview and send)
+│   ├── test_app.py         # python test_app.py
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── App.vue
-│   │   ├── cardTemplates.js  # HTML card generators (JS, used for preview)
 │   │   ├── components/       # Per-step Vue components
 │   │   └── main.js
 │   ├── vite.config.js
@@ -87,13 +88,13 @@ secret-santa-webapp/
 cd frontend && npm run build      # outputs to frontend/dist/
 ```
 
-For the backend in production, use a real WSGI server (e.g. Gunicorn) behind HTTPS instead of `flask run`. SMTP credentials are accepted from the form and never persisted on the server.
+For the backend in production, use a real WSGI server (e.g. Gunicorn) behind HTTPS instead of `flask run`. SMTP credentials are accepted from the form and never persisted or logged. Set `FLASK_DEBUG=1` to run the dev server in debug mode.
 
 ## Troubleshooting
 
 - **Backend won't start on port 5000** — that's macOS AirPlay Receiver. The app already uses 5001; if you want 5000 back, disable AirPlay Receiver in System Settings → General → AirDrop & Handoff.
 - **Gmail rejects the password** — make sure 2-Step Verification is on and you're using a 16-character App Password, not your account password.
-- **Pairing fails** — too many exclusions can make a valid arrangement impossible. The algorithm will retry, but with very tight constraints it can spin; loosen the rules.
+- **Pairing fails** — too many exclusions can make a valid arrangement impossible. The app reports "No valid pairing found"; loosen the rules.
 - **403 / CORS errors** — confirm the backend is running (`curl http://localhost:5001/api/health` should return `{"status":"ok"}`).
 
 ## Stack

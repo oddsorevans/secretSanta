@@ -36,14 +36,14 @@
         </div>
         <div>
           <h3 class="font-bold text-lg mb-2" :class="debugMode ? 'text-purple-900' : (emailDebugMode ? 'text-amber-900' : 'text-blue-900')">
-            {{ debugMode ? 'Debug Mode Active' : (emailDebugMode ? 'Email Debug Mode Active' : 'Important Notice') }}
+            {{ debugMode ? 'Preview Only Active' : (emailDebugMode ? 'Email Preview Only Active' : 'Important Notice') }}
           </h3>
           <p class="text-sm leading-relaxed" :class="debugMode ? 'text-purple-800' : (emailDebugMode ? 'text-amber-800' : 'text-blue-800')">
             <span v-if="debugMode">
-              You're in debug mode! Clicking the button below will generate pairings and show you all the cards without sending any emails. Perfect for testing!
+              You're in preview-only mode! Clicking the button below will generate pairings and show you all the cards without sending any emails. Perfect for testing!
             </span>
             <span v-else-if="emailDebugMode">
-              Email debug mode is active! All emails will be sent to <strong>{{ smtpConfig.email }}</strong> instead of actual recipients.
+              Test send is active! All emails will be sent to <strong>{{ smtpConfig.email }}</strong> instead of actual recipients.
               This lets you verify the emails are formatted correctly before sending to everyone.
               The pairings will NOT be shown to you - they remain secret!
             </span>
@@ -63,21 +63,10 @@
       <p v-if="detailMessage" class="text-sm mt-2 opacity-90">{{ detailMessage }}</p>
     </div>
 
-    <!-- Progress Bar -->
-    <div v-if="sending && !debugMode" class="mb-8">
-      <div class="bg-gray-100 rounded-full h-4 overflow-hidden">
-        <div
-          class="bg-gradient-to-r from-modern-secondary to-modern-primary h-full transition-all duration-300"
-          :style="{ width: `${progress}%` }"
-        ></div>
-      </div>
-      <p class="text-center text-sm font-medium text-gray-500 mt-3">Sending emails... {{ emailsSent }} / {{ participants.length }}</p>
-    </div>
-
     <!-- Debug Mode Results with Card Previews -->
     <div v-if="debugMode && debugResults.length > 0" class="mb-8 space-y-6">
       <div class="p-6 bg-purple-50 border border-purple-100 rounded-2xl">
-        <h3 class="font-bold text-purple-900 mb-2 text-lg">🔍 Debug Mode Active - Pairings & Card Previews</h3>
+        <h3 class="font-bold text-purple-900 mb-2 text-lg">🔍 Preview Only Active - Pairings & Card Previews</h3>
         <p class="text-sm text-purple-700">
           Below are all the pairings and their corresponding email cards. No emails have been sent.
         </p>
@@ -129,6 +118,7 @@
             <div class="overflow-auto" style="max-height: 600px;">
               <iframe
                 :srcdoc="result.cardHTML"
+                sandbox=""
                 class="w-full border-0"
                 style="min-height: 600px;"
               ></iframe>
@@ -168,7 +158,6 @@
 <script setup>
 import { ref, computed } from 'vue'
 import axios from 'axios'
-import { cardStyles, generateEmailCard } from '../cardTemplates.js'
 
 const props = defineProps({
   participants: Array,
@@ -178,7 +167,8 @@ const props = defineProps({
   smtpConfig: Object,
   cardStyle: String,
   debugMode: Boolean,
-  emailDebugMode: Boolean
+  emailDebugMode: Boolean,
+  themes: Object
 })
 
 const sending = ref(false)
@@ -187,13 +177,14 @@ const statusMessage = ref('')
 const detailMessage = ref('')
 const emailsSent = ref(0)
 const debugResults = ref([])
+const failed = ref([])
 
 const totalExclusions = computed(() => {
   return Object.values(props.exclusions).reduce((sum, arr) => sum + arr.length, 0)
 })
 
 const cardStyleName = computed(() => {
-  return cardStyles[props.cardStyle]?.name || 'Classic'
+  return props.themes?.[props.cardStyle]?.name || props.cardStyle
 })
 
 const canSend = computed(() => {
@@ -214,11 +205,6 @@ const statusClass = computed(() => {
     return 'bg-red-100 border border-red-300 text-red-800'
   }
   return 'bg-blue-100 border border-blue-300 text-blue-800'
-})
-
-const progress = computed(() => {
-  if (props.participants.length === 0) return 0
-  return (emailsSent.value / props.participants.length) * 100
 })
 
 const sendEmails = async () => {
@@ -251,61 +237,32 @@ const sendEmails = async () => {
 
     if (props.debugMode) {
       // Debug mode: show pairings with card previews
-      const pairings = response.data.pairings
-
-      debugResults.value = pairings.map(pairing => {
-        const giverData = props.participants.find(p => p.name === pairing.giver)
-        const recipientData = props.participants.find(p => p.name === pairing.recipient)
-
-        const messageBody = props.emailTemplate
-          .replace(/{giver_name}/g, giverData.name)
-          .replace(/{recipient_name}/g, recipientData.name)
-          .replace(/{recipient_interests}/g, recipientData.interests)
-          .replace(/{recipient_address}/g, recipientData.address || '')
-
-        const cardHTML = generateEmailCard(
-          props.cardStyle,
-          giverData.name,
-          recipientData.name,
-          recipientData.interests,
-          recipientData.address || '',
-          messageBody
-        )
-
-        return {
-          giver: pairing.giver,
-          recipient: pairing.recipient,
-          giverEmail: giverData.email,
-          cardHTML: cardHTML,
-          showCard: false
-        }
-      })
+      debugResults.value = response.data.pairings.map(p => ({
+        giver: p.giver,
+        recipient: p.recipient,
+        giverEmail: p.giverEmail,
+        cardHTML: p.html,
+        showCard: false
+      }))
 
       statusMessage.value = 'Debug Mode Complete'
       detailMessage.value = `Generated ${debugResults.value.length} pairings with card previews. No emails were sent.`
       sending.value = false
     } else {
-      // Real send mode
-      const interval = setInterval(() => {
-        if (emailsSent.value < props.participants.length) {
-          emailsSent.value++
-        } else {
-          clearInterval(interval)
-        }
-      }, 500)
-
-      setTimeout(() => {
-        clearInterval(interval)
-        emailsSent.value = props.participants.length
-        sent.value = true
-        statusMessage.value = 'Success! All emails sent.'
-        detailMessage.value = `${props.participants.length} participants received their Secret Santa assignments.`
-        sending.value = false
-      }, props.participants.length * 500)
+      emailsSent.value = response.data.emailsSent
+      failed.value = response.data.failed || []
+      sent.value = failed.value.length === 0
+      statusMessage.value = sent.value ? 'Success! All emails sent.' : 'Failed: some emails were not sent'
+      detailMessage.value = sent.value
+        ? `${emailsSent.value} participants received their Secret Santa assignments.`
+        : `${emailsSent.value} sent. Failed for: ${failed.value.join(', ')}. Starting over will reshuffle pairings, so check with everyone first.`
+      sending.value = false
     }
   } catch (error) {
     statusMessage.value = 'Error sending emails'
     detailMessage.value = error.response?.data?.error || error.message || 'Unknown error occurred'
+    emailsSent.value = error.response?.data?.emailsSent || 0
+    failed.value = error.response?.data?.failed || []
     console.error('Send error:', error)
     sending.value = false
   }

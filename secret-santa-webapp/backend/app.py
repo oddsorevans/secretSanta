@@ -1,183 +1,131 @@
+import os
+import random
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import random
-from datetime import datetime
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from card_templates import generate_email_card
+
+from card_templates import render_card, fill_template, theme_list
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# Add logging for debugging
-@app.before_request
-def log_request():
-    print(f"Received {request.method} request to {request.path}")
-    if request.method == 'POST':
-        print(f"Request data: {request.get_json()}")
+MAX_ATTEMPTS = 10000
+_rng = random.SystemRandom()
 
 
 def create_secret_santa_list(names, excluded_pairings=None):
-    """
-    Generate Secret Santa pairings with exclusion rules.
-    Based on the original Python implementation.
-    """
-    if excluded_pairings is None:
-        excluded_pairings = {}
-
-    random.seed(datetime.now().timestamp())
-    secret_santa_list = []
-    remaining_names = names.copy()
-
-    for giver in names:
-        possible_recipients = [
-            name for name in remaining_names
-            if name != giver and name not in excluded_pairings.get(giver, [])
-        ]
-
-        if not possible_recipients:
-            # If there are no valid recipients, start over
-            return create_secret_santa_list(names, excluded_pairings)
-
-        recipient = random.choice(possible_recipients)
-        secret_santa_list.append((giver, recipient))
-        remaining_names.remove(recipient)
-
-    return secret_santa_list
+    """Return [(giver, recipient)] honoring exclusions. Shuffle until valid so
+    every valid assignment is equally likely. Raises ValueError if none found."""
+    excluded = excluded_pairings or {}
+    recipients = list(names)
+    for _ in range(MAX_ATTEMPTS):
+        _rng.shuffle(recipients)
+        if all(g != r and r not in excluded.get(g, []) for g, r in zip(names, recipients)):
+            return list(zip(names, recipients))
+    raise ValueError('No valid pairing found - loosen the exclusions')
 
 
-def send_email(smtp_config, recipient_email, subject, html_body):
-    """Send an HTML email using SMTP."""
-    try:
-        s = smtplib.SMTP(smtp_config['server'], smtp_config['port'])
-        s.starttls()
-        s.login(smtp_config['email'], smtp_config['password'])
+def parse_participants(raw, need_email):
+    """Strip/validate participants. Raises ValueError with a user-facing message."""
+    people = []
+    for p in raw or []:
+        person = {k: str(p.get(k, '')).strip() for k in ('name', 'email', 'interests', 'address')}
+        if not person['name']:
+            raise ValueError('Every participant needs a name')
+        if need_email and not person['email']:
+            raise ValueError(f"{person['name']} has no email address")
+        people.append(person)
+    if len(people) < 3:
+        raise ValueError('Need at least 3 participants')
+    if len({p['name'] for p in people}) != len(people):
+        raise ValueError('Participant names must be unique')
+    return people
 
-        msg = MIMEMultipart('alternative')
-        msg['From'] = smtp_config['email']
-        msg['To'] = recipient_email
-        msg['Subject'] = subject
 
-        # Attach HTML content
-        msg.attach(MIMEText(html_body, 'html'))
+def build_message(sender, to, subject, html):
+    msg = MIMEMultipart('alternative')
+    msg['From'], msg['To'], msg['Subject'] = sender, to, subject
+    # plain-text first, HTML last (clients prefer the last part)
+    msg.attach(MIMEText('This Secret Santa card needs an HTML-capable email client.', 'plain'))
+    msg.attach(MIMEText(html, 'html'))
+    return msg
 
-        s.send_message(msg)
-        s.quit()
-        return True
-    except Exception as e:
-        raise Exception(f"Failed to send email to {recipient_email}: {str(e)}")
+
+@app.route('/api/themes')
+def themes():
+    return jsonify(theme_list())
+
+
+@app.route('/api/preview', methods=['POST'])
+def preview():
+    data = request.get_json(silent=True) or {}
+    giver = data.get('giver') or {}
+    recipient = data.get('recipient') or {}
+    return jsonify({'html': render_card(
+        data.get('cardStyle'),
+        {'name': str(giver.get('name', ''))},
+        {k: str(recipient.get(k, '')) for k in ('name', 'interests', 'address')},
+        str(data.get('emailTemplate', '')),
+    )})
 
 
 @app.route('/api/send', methods=['POST'])
 def send_secret_santa():
-    """
-    Main endpoint to generate pairings and send emails.
-    In non-test mode, pairings are never returned to the client.
-    """
+    """Generate pairings; in test mode return cards, otherwise email them.
+    Real-send responses never contain pairings."""
+    data = request.get_json(silent=True) or {}
+    test_mode = bool(data.get('testMode'))
+    smtp = data.get('smtpConfig') or {}
+    subject = data.get('emailSubject') or 'Secret Santa'
+    template = data.get('emailTemplate', '')
+    style = data.get('cardStyle')
+
     try:
-        data = request.json
+        people = parse_participants(data.get('participants'), need_email=not test_mode)
+        if not test_mode and not (smtp.get('email') and smtp.get('password')):
+            raise ValueError('SMTP email and password required for real send mode')
+        by_name = {p['name']: p for p in people}
+        pairings = create_secret_santa_list([p['name'] for p in people], data.get('exclusions') or {})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
-        # Debug logging
-        print(f"Received request - testMode: {data.get('testMode', False)}")
+    def card(giver, recipient):
+        return render_card(style, giver, recipient, template)
 
-        participants = data.get('participants', [])
-        exclusions = data.get('exclusions', {})
-        email_subject = data.get('emailSubject', 'Secret Santa')
-        email_template = data.get('emailTemplate', '')
-        smtp_config = data.get('smtpConfig', {})
-        card_style = data.get('cardStyle', 'classic')
-        test_mode = data.get('testMode', False)
-        email_debug_mode = data.get('emailDebugMode', False)
+    if test_mode:
+        return jsonify({'success': True, 'testMode': True, 'pairings': [
+            {'giver': g, 'recipient': r, 'giverEmail': by_name[g]['email'],
+             'html': card(by_name[g], by_name[r])}
+            for g, r in pairings
+        ]})
 
-        # Validate input
-        if len(participants) < 3:
-            return jsonify({'error': 'Need at least 3 participants'}), 400
+    sent, failed = 0, []
+    try:
+        with smtplib.SMTP(smtp.get('server') or 'smtp.gmail.com', int(smtp.get('port') or 587), timeout=30) as s:
+            s.starttls()
+            s.login(smtp['email'], smtp['password'])  # fail before sending anything
+            for g, r in pairings:
+                # email debug mode: everything goes to the organizer
+                to = smtp['email'] if data.get('emailDebugMode') else by_name[g]['email']
+                try:
+                    s.send_message(build_message(smtp['email'], to, subject, card(by_name[g], by_name[r])))
+                    sent += 1
+                except smtplib.SMTPException:
+                    failed.append(g)  # names the giver only; the pairing stays secret
+    except (smtplib.SMTPException, OSError) as e:
+        return jsonify({'error': f'SMTP error: {e}', 'emailsSent': sent, 'failed': failed}), 502
 
-        # Only validate SMTP config if NOT in test mode
-        if not test_mode:
-            if not smtp_config:
-                return jsonify({'error': 'SMTP configuration required for real send mode'}), 400
-            if not smtp_config.get('email') or not smtp_config.get('password'):
-                return jsonify({'error': 'SMTP email and password required for real send mode'}), 400
-
-        # Extract names for pairing algorithm
-        names = [p['name'] for p in participants]
-
-        # Create participant lookup dictionary
-        participant_dict = {p['name']: p for p in participants}
-
-        # Generate pairings
-        pairings = create_secret_santa_list(names, exclusions)
-
-        # Test mode: return pairings without sending emails
-        if test_mode:
-            pairing_results = [
-                {'giver': giver, 'recipient': recipient}
-                for giver, recipient in pairings
-            ]
-            return jsonify({
-                'success': True,
-                'testMode': True,
-                'pairings': pairing_results
-            })
-
-        # Send emails (pairings are not returned to client)
-        emails_sent = 0
-        errors = []
-
-        for giver_name, recipient_name in pairings:
-            giver = participant_dict[giver_name]
-            recipient = participant_dict[recipient_name]
-
-            # Replace template variables in message body
-            message_body = email_template
-            message_body = message_body.replace('{giver_name}', giver['name'])
-            message_body = message_body.replace('{recipient_name}', recipient['name'])
-            message_body = message_body.replace('{recipient_interests}', recipient['interests'])
-            message_body = message_body.replace('{recipient_address}', recipient.get('address', ''))
-
-            # Generate HTML email card
-            html_body = generate_email_card(
-                card_style,
-                giver['name'],
-                recipient['name'],
-                recipient['interests'],
-                recipient.get('address', ''),
-                message_body
-            )
-
-            try:
-                # If email debug mode is enabled, send to the sender's email instead of the recipient
-                target_email = smtp_config['email'] if email_debug_mode else giver['email']
-                send_email(smtp_config, target_email, email_subject, html_body)
-                emails_sent += 1
-            except Exception as e:
-                errors.append(str(e))
-
-        if errors:
-            return jsonify({
-                'success': False,
-                'error': 'Some emails failed to send',
-                'details': errors,
-                'emailsSent': emails_sent
-            }), 500
-
-        return jsonify({
-            'success': True,
-            'emailsSent': emails_sent
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'success': not failed, 'emailsSent': sent, 'failed': failed})
 
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health')
 def health_check():
-    """Simple health check endpoint."""
     return jsonify({'status': 'ok'})
 
 
 if __name__ == '__main__':
-    # Use port 5001 to avoid conflict with macOS AirPlay on port 5000
-    app.run(debug=True, port=5001)
+    # Port 5001 avoids macOS AirPlay on 5000. Debug only via FLASK_DEBUG=1.
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1', port=5001)

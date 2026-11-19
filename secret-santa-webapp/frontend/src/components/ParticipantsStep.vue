@@ -14,7 +14,8 @@
           class="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-500 file:text-white hover:file:bg-blue-600 cursor-pointer transition-all"
         />
       </div>
-      <p class="text-xs text-gray-400 mt-3 font-medium">Format: Name, Email, Interests, Address</p>
+      <p class="text-xs text-gray-400 mt-3 font-medium">Header row with Name, Email, Interests, Address (any order; Address optional). Imported people are added to the list; duplicate emails are skipped.</p>
+      <p v-if="importMessage" class="text-sm text-gray-600 mt-2 font-medium">{{ importMessage }}</p>
     </div>
 
     <!-- Manual Add Form -->
@@ -48,6 +49,7 @@
           class="px-5 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-modern-primary focus:border-transparent outline-none transition-all shadow-sm"
         />
       </div>
+      <p v-if="duplicateName" class="text-sm text-red-500 mb-3">Someone named "{{ newParticipant.name.trim() }}" is already on the list - names must be unique.</p>
       <button
         @click="addParticipant"
         :disabled="!canAddParticipant"
@@ -58,13 +60,13 @@
     </div>
 
     <!-- Participants List -->
-    <div v-if="localParticipants.length > 0">
+    <div v-if="participants.length > 0">
       <h3 class="font-bold text-gray-700 mb-6 text-lg flex items-center gap-2">
-        Participants <span class="bg-gray-200 text-gray-600 px-2 py-1 rounded-lg text-xs">{{ localParticipants.length }}</span>
+        Participants <span class="bg-gray-200 text-gray-600 px-2 py-1 rounded-lg text-xs">{{ participants.length }}</span>
       </h3>
       <div class="grid grid-cols-1 gap-4">
         <div
-          v-for="(participant, index) in localParticipants"
+          v-for="(participant, index) in participants"
           :key="index"
           class="flex items-center justify-between p-5 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-all group"
         >
@@ -81,7 +83,7 @@
           </div>
           <button
             @click="removeParticipant(index)"
-            class="opacity-0 group-hover:opacity-100 ml-4 px-4 py-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg text-sm font-bold transition-all"
+            class="ml-4 px-4 py-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg text-sm font-bold transition-all"
           >
             Remove
           </button>
@@ -95,41 +97,37 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 
-const props = defineProps({
-  participants: Array
+const participants = defineModel('participants', { required: true })
+
+const blank = () => ({ name: '', email: '', interests: '', address: '' })
+const newParticipant = ref(blank())
+const importMessage = ref('')
+
+const duplicateName = computed(() => {
+  const name = newParticipant.value.name.trim()
+  return !!name && participants.value.some(p => p.name === name)
 })
-
-const emit = defineEmits(['update:participants'])
-
-const localParticipants = ref([...props.participants])
-
-const newParticipant = ref({
-  name: '',
-  email: '',
-  interests: '',
-  address: ''
-})
-
-watch(localParticipants, (newVal) => {
-  emit('update:participants', newVal)
-}, { deep: true })
 
 const canAddParticipant = computed(() => {
-  return newParticipant.value.name && newParticipant.value.email && newParticipant.value.interests
+  const p = newParticipant.value
+  return p.name.trim() && p.email.trim() && p.interests.trim() && !duplicateName.value
 })
 
 const addParticipant = () => {
-  if (canAddParticipant.value) {
-    localParticipants.value.push({ ...newParticipant.value })
-    newParticipant.value = { name: '', email: '', interests: '', address: '' }
-  }
+  if (!canAddParticipant.value) return
+  const p = Object.fromEntries(Object.entries(newParticipant.value).map(([k, v]) => [k, v.trim()]))
+  participants.value = [...participants.value, p]
+  newParticipant.value = blank()
 }
 
 const removeParticipant = (index) => {
-  localParticipants.value.splice(index, 1)
+  participants.value = participants.value.filter((_, i) => i !== index)
 }
+
+const splitCsvLine = (line) =>
+  line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(p => p.trim().replace(/^"|"$/g, ''))
 
 const handleFileUpload = (event) => {
   const file = event.target.files[0]
@@ -137,31 +135,38 @@ const handleFileUpload = (event) => {
 
   const reader = new FileReader()
   reader.onload = (e) => {
-    const text = e.target.result
-    const lines = text.split('\n')
-    const newParticipants = []
-
-    // Skip header row
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-
-      // Parse CSV (handle quoted fields)
-      const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/
-      const parts = line.split(regex).map(p => p.trim().replace(/^"|"$/g, ''))
-
-      if (parts.length >= 3) {
-        newParticipants.push({
-          name: parts[0],
-          email: parts[1],
-          interests: parts[2],
-          address: parts[3] || ''
-        })
-      }
+    const [header, ...rows] = e.target.result.split(/\r?\n/).filter(l => l.trim())
+    const cols = splitCsvLine(header || '').map(h => h.toLowerCase())
+    const idx = Object.fromEntries(['name', 'email', 'interests', 'address'].map(k => [k, cols.indexOf(k)]))
+    if (idx.name < 0 || idx.email < 0 || idx.interests < 0) {
+      importMessage.value = 'CSV needs a header row with Name, Email and Interests columns.'
+      return
     }
 
-    localParticipants.value = newParticipants
+    const names = new Set(participants.value.map(p => p.name))
+    const emails = new Set(participants.value.map(p => p.email.toLowerCase()))
+    const added = []
+    let skipped = 0
+    for (const row of rows) {
+      const parts = splitCsvLine(row)
+      const person = {
+        name: parts[idx.name] || '',
+        email: parts[idx.email] || '',
+        interests: parts[idx.interests] || '',
+        address: idx.address >= 0 ? parts[idx.address] || '' : '',
+      }
+      if (!person.name || !person.email || names.has(person.name) || emails.has(person.email.toLowerCase())) {
+        skipped++
+        continue
+      }
+      names.add(person.name)
+      emails.add(person.email.toLowerCase())
+      added.push(person)
+    }
+    participants.value = [...participants.value, ...added]
+    importMessage.value = `Added ${added.length}${skipped ? `, skipped ${skipped} (incomplete or duplicate)` : ''}.`
   }
   reader.readAsText(file)
+  event.target.value = '' // allow re-importing the same file
 }
 </script>
